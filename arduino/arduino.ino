@@ -41,11 +41,6 @@ void setup() {
   pinMode(buttonBluePin, INPUT_PULLUP);
   pinMode(buttonGreenPin, INPUT_PULLUP);
   
-  baseServo.attach(baseServoPin);
-  shoulderServo.attach(shoulderServoPin);
-  elbowServo.attach(elbowServoPin);
-  gripperServo.attach(gripperServoPin);
-
   baseServo.attach(baseServoPin, 500, 2400);
   shoulderServo.attach(shoulderServoPin, 500, 2400);
   elbowServo.attach(elbowServoPin, 500, 2400);
