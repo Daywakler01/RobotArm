@@ -98,7 +98,7 @@ void controlServo(String servoName, int angle) {
   }
 
   // จำกัดค่าองศาระหว่าง 0-180
-  angle = constrain(angle, 0, 180);
+  angle = constrain(angle, 0, 180); 
   
   targetServo->write(angle);
   *targetPosition = angle;
@@ -108,25 +108,18 @@ void controlServo(String servoName, int angle) {
 }
 
 void checkButton(int index, int buttonPin, Servo &servo, int &position) {
-  bool currentState = !digitalRead(buttonPin);
-  unsigned long currentTime = millis();
+  bool currentState = !digitalRead(buttonPin); //
+  unsigned long currentTime = millis(); // บันทึกเวลาปัจจุบัน
   
-  if (currentState != buttonStates[index]) {
-    if (currentState) {
+  if (currentState != buttonStates[index]) { // ตรวจสอบว่าสถานะปัจจุบันมีการกดหรือปล่อยอยู่ ถ้าเงื่อนไขไม่ตรงจะเข้าไปทำงานข้างใน
+    if (currentState) { // ถ้าสถานะกดปุ่มปัจจุบันคือกดปุ่ม จะบันทึกเวลาปัจจุบัน
       lastPressTime[index] = currentTime;
-    } else {
-      unsigned long pressDuration = currentTime - lastPressTime[index];
-      Serial.print("Button ");
-      Serial.print(index);
-      Serial.print(" was pressed for ");
-      Serial.print(pressDuration);
-      Serial.println(" ms");
-    }
+    } 
     buttonStates[index] = currentState;
   }
 
   if (currentState && (currentTime - lastPressTime[index] >= buttonHoldDelay) &&
-      (currentTime - lastMoveTime[index] >= moveInterval)) {
+      (currentTime - lastMoveTime[index] >= moveInterval)) { //ตรวจสอบสถานะการกดปุ่มปัจจุบัน และตรวจสอบเวลา ต้องมากกว่า delay ปุ่ม ที่กำหนดไว้ และเวลาปัจจุบัน มากกว่าเวลาเคลื่อนที่
     String servoName;
     switch(index) {
       case 0: servoName = "Base"; break;
