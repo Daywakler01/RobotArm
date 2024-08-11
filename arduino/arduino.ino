@@ -1,10 +1,10 @@
 #include <Servo.h>
 
-// กำหนดพินของปุ่มกด
-const int buttonRedPin = 2;    // K1
-const int buttonYellowPin = 3; // K2
-const int buttonBluePin = 4;   // K3
-const int buttonGreenPin = 5;  // K4
+// พินของ Joystick
+const int VRX_LEFT = A0;   // X axis of left joystick
+const int VRY_LEFT = A1;   // Y axis of left joystick
+const int VRX_RIGHT = A2;  // X axis of right joystick
+const int VRY_RIGHT = A3;  // Y axis of right joystick
 
 // พินของเซอร์โว
 const int baseServoPin = 6;
@@ -23,23 +23,20 @@ int shoulderPosition = 90;
 int elbowPosition = 90;
 int gripperPosition = 90;
 
-// ตัวแปรสำหรับการควบคุมทิศทาง
-bool directions[4] = {true, true, true, true}; // true = เพิ่มองศา, false = ลดองศา
+// ค่าเริ่มต้นของ joystick
+int joyMiddle = 512;
+int joyDeadZone = 50;
 
-// ตัวแปรสำหรับตรวจสอบการกดค้าง
-unsigned long lastPressTime[4] = {0, 0, 0, 0};
-bool buttonStates[4] = {false, false, false, false};
-unsigned long buttonHoldDelay = 500; // เวลาในการกดค้าง (มิลลิวินาที)
-unsigned long lastMoveTime[4] = {0, 0, 0, 0};
-unsigned long moveInterval = 10; // ระยะเวลาระหว่างการเคลื่อนที่ (มิลลิวินาที)
+// ตัวแปรสำหรับการควบคุมความเร็ว
+unsigned long lastMoveTime = 0;
+unsigned long moveInterval = 15; // ระยะเวลาระหว่างการเคลื่อนที่ (มิลลิวินาที)
+
+// ตัวแปรสำหรับการควบคุมการจับและปล่อย
+const int GRIPPER_OPEN = 180;
+const int GRIPPER_CLOSE = 0;
 
 void setup() {
   Serial.begin(115200);
-  
-  pinMode(buttonRedPin, INPUT_PULLUP);
-  pinMode(buttonYellowPin, INPUT_PULLUP);
-  pinMode(buttonBluePin, INPUT_PULLUP);
-  pinMode(buttonGreenPin, INPUT_PULLUP);
   
   baseServo.attach(baseServoPin, 500, 2400);
   shoulderServo.attach(shoulderServoPin, 500, 2400);
@@ -48,7 +45,7 @@ void setup() {
 
   Serial.println("Arduino initialized");
 
-
+  // ตั้งค่าตำแหน่งเริ่มต้น
   controlServo("Base", basePosition);
   controlServo("Shoulder", shoulderPosition);
   controlServo("Elbow", elbowPosition);
@@ -56,10 +53,46 @@ void setup() {
 }
 
 void loop() {
-  checkButton(0, buttonRedPin, baseServo, basePosition);
-  checkButton(1, buttonYellowPin, shoulderServo, shoulderPosition);
-  checkButton(2, buttonBluePin, elbowServo, elbowPosition);
-  checkButton(3, buttonGreenPin, gripperServo, gripperPosition);
+  unsigned long currentTime = millis();
+  
+  if (currentTime - lastMoveTime >= moveInterval) {
+    // อ่านค่า Joystick
+    int leftX = analogRead(VRX_LEFT);
+    int leftY = analogRead(VRY_LEFT);
+    int rightX = analogRead(VRX_RIGHT);
+    int rightY = analogRead(VRY_RIGHT);
+
+    // ควบคุม Base (Left X)
+    if (abs(leftX - joyMiddle) > joyDeadZone) {
+      basePosition += map(leftX, 0, 1023, -2, 2);
+      basePosition = constrain(basePosition, 0, 180);
+      controlServo("Base", basePosition);
+    }
+
+    // ควบคุม Shoulder (Left Y)
+    if (abs(leftY - joyMiddle) > joyDeadZone) {
+      shoulderPosition += map(leftY, 0, 1023, 2, -2); // กลับทิศทาง
+      shoulderPosition = constrain(shoulderPosition, 0, 180);
+      controlServo("Shoulder", shoulderPosition);
+    }
+
+    // ควบคุม Elbow (Right Y)
+    if (abs(rightY - joyMiddle) > joyDeadZone) {
+      elbowPosition += map(rightY, 0, 1023, 2, -2); // กลับทิศทาง
+      elbowPosition = constrain(elbowPosition, 0, 180);
+      controlServo("Elbow", elbowPosition);
+    }
+
+    // ควบคุม Gripper ด้วยแกน X ของ joystick ขวา
+    if (abs(rightX - joyMiddle) > joyDeadZone) {
+      gripperPosition += map(rightX, 0, 1023, -2, 2);
+      gripperPosition = constrain(gripperPosition, GRIPPER_CLOSE, GRIPPER_OPEN);
+      controlServo("Gripper", gripperPosition);
+    }
+
+    lastMoveTime = currentTime;
+  }
+
 
   // รับคำสั่งจาก ESP8266
   if (Serial.available()) {
@@ -68,8 +101,6 @@ void loop() {
     Serial.println(command);
     executeCommand(command);
   }
-
-  delay(15);
 }
 
 void controlServo(String servoName, int angle) {
@@ -100,46 +131,6 @@ void controlServo(String servoName, int angle) {
 
   // ส่งข้อมูลกลับไปยัง ESP8266
   Serial.println(servoName + "," + String(angle));
-}
-
-void checkButton(int index, int buttonPin, Servo &servo, int &position) {
-  bool currentState = !digitalRead(buttonPin); //
-  unsigned long currentTime = millis(); // บันทึกเวลาปัจจุบัน
-  
-  if (currentState != buttonStates[index]) { // ตรวจสอบว่าสถานะปัจจุบันมีการกดหรือปล่อยอยู่ ถ้าเงื่อนไขไม่ตรงจะเข้าไปทำงานข้างใน
-    if (currentState) { // ถ้าสถานะกดปุ่มปัจจุบันคือกดปุ่ม จะบันทึกเวลาปัจจุบัน
-      lastPressTime[index] = currentTime;
-    } 
-    buttonStates[index] = currentState;
-  }
-
-  if (currentState && (currentTime - lastPressTime[index] >= buttonHoldDelay) &&
-      (currentTime - lastMoveTime[index] >= moveInterval)) { //ตรวจสอบสถานะการกดปุ่มปัจจุบัน และตรวจสอบเวลา ต้องมากกว่า delay ปุ่ม ที่กำหนดไว้ และเวลาปัจจุบัน มากกว่าเวลาเคลื่อนที่
-    String servoName;
-    switch(index) {
-      case 0: servoName = "Base"; break;
-      case 1: servoName = "Shoulder"; break;
-      case 2: servoName = "Elbow"; break;
-      case 3: servoName = "Gripper"; break;
-    }
-
-    if (directions[index]) {
-      position++;
-      if (position >= 180) {
-        position = 180;
-        directions[index] = false;
-      }
-    } else {
-      position--;
-      if (position <= 0) {
-        position = 0;
-        directions[index] = true;
-      }
-    }
-
-    controlServo(servoName, position);
-    lastMoveTime[index] = currentTime;
-  }
 }
 
 void executeCommand(String command) {
